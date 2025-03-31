@@ -1,1 +1,290 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar 31 14:08:04 2025
+
+@author: Johan Linstad
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar 27 20:06:28 2025
+
+@author: Johan Linstad
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Mar 27 19:25:13 2025
+
+@author: Johan Linstad
+"""
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import norm
+import os
+
+# Høyde per etasje i mm
+H = 2000  
+
+# Liste med filbaner
+file_paths = [
+    "C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240910_1547_Test02_T_CORR.xlsx",
+    "C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240910_1627_Test05_T_CORR.xlsx",
+    "C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240910_1649_Test07_T_CORR.xlsx",
+    "C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240910_1723_Test10_T_CORR.xlsx",
+    "C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240910_1822_Test13_T_CORR.xlsx"]
+
+#file_paths = [
+    #"C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240911_1513_Test14_T_CORR.xlsx",
+    #"C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240911_1543_Test17_T_CORR.xlsx",
+    #"C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240911_1604_Test19_T_CORR.xlsx",
+    #"C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240911_1644_Test21_T_CORR.xlsx",
+    #"C:\\Users\\Johan Linstad\\Documents\\Master\\transfer_230466_files_963a7b941\\ACQ_20240911_1718_Test22_T_CORR.xlsx"]
+
+# Damage state grenser (interstory drift i % og akselerasjon i g)
+drift_ds_bounds = [0.0, 0.5, 1.0, 2.0, 3.5]
+acc_ds_bounds = [0.0, 0.25, 0.5, 1.0, 2.5]
+colors = ['green', 'yellow', 'orange', 'red']
+
+drift_data = {}
+acc_data = {}
+
+# Hent data for hver fil
+for file_path in file_paths:
+    df = pd.read_excel(file_path)
+    test_number = "Test " + file_path.split("Test")[1].split("_")[0]
+
+    # Displacement-kolonner (kun X-retning)
+    disp_columns_x = [col for col in df.columns if col.startswith("Disp") and col.endswith("_X")]
+    acc_cols = [col for col in df.columns if col.startswith("Acc") and "_X" in col]
+    
+    # Fjern sensorer fra listen over X-displacement-sensorer
+    #sensorer_å_utelate = ["Disp04_NE_1F_Y", "Disp05_NE_1F_X"]
+    #disp_columns_x = [col for col in disp_columns_x if col not in sensorer_å_utelate]
+
+    ground_sensor_x = "PosA1T"
+    df_disp = df[["Time (s)"] + disp_columns_x + [ground_sensor_x]].copy()
+    df_disp = df_disp[(df_disp["Time (s)"] >= 5) & (df_disp["Time (s)"] <= 30)].reset_index(drop=True)
+
+    #%%
+    max_displacements = df[disp_columns_x].abs().max().sort_values(ascending=False)
+
+
+    plt.figure(figsize=(10, 6))
+    max_displacements.plot(kind='bar')
+    plt.title(f"{test_number} - Max Absolute Displacement per X-Sensor unfiltered")
+    plt.ylabel("Max Displacement (mm)")
+    plt.xticks(rotation=45, ha='right')
+    plt.grid(True)
+    for i, value in enumerate(max_displacements):
+        plt.text(i, value, f"{value:.1f} mm", ha='center', va='bottom', fontsize=9, fontweight='bold')
+    plt.tight_layout()
+    plot_name = f"{test_number}_MaxDisplacement_X_unfiltered.png"
+    #plt.savefig(os.path.join(save_folder, plot_name))
+    plt.show()
+    plt.close()
+
+
+    #%%
+    #disp_all = [col for col in df.columns if col.startswith("Disp")]
+    acc_columns = [col for col in df.columns if col.startswith("Acc")]
+    
+  
+    print(disp_columns_x)
+        
+    # Definerer bakkenivå-sensorer
+    ground_sensor_x = "PosA1T"  # X-retning
+    ground_sensor_y = "PosA2L"  # Y-retning
+        
+
+    # Kopierer relevante kolonner inkludert tid
+    df_disp_x = df[["Time (s)"] + disp_columns_x + [ground_sensor_x]].copy()
+    #df_disp = df[["Time (s)"] + disp_columns].copy()
+    df_acc = df[["Time (s)"] + acc_columns].copy()
+
+    # Trekker fra gjennomsnittet av de 5 første sekundene for å justere nullpunktet
+    start_values = df_disp_x[df_disp_x["Time (s)"] <= 5].mean()
+    df_disp_x.iloc[:, 1:] = df_disp_x.iloc[:, 1:] - start_values[1:]
+    
+
+
+    #%%
+            
+    # Velger sensorer for interstory drift
+    ground_floor_sensors = ["PosA1T"]
+    first_floor_sensors = [col for col in disp_columns_x if "_1F" in col]
+    second_floor_sensors = [col for col in disp_columns_x if "_2F" in col]
+        
+    ground_floor_sensors.sort()
+    first_floor_sensors.sort()
+    second_floor_sensors.sort()
+        
+        
+
+    
+        
+    # Liste over sensorer som må inverteres
+    inverted_sensors = ["Disp12_NE_1F_X", "Disp16_NE_2F_X"]
+    #inverted_sensors = ["Disp09_NE_2F_X", "Disp05_NE_1F_X"]
+    # Inverterer verdiene for sensorene i listen
+    for sensor in inverted_sensors:
+            if sensor in df_disp_x.columns:
+                df_disp_x[sensor] = -df_disp_x[sensor]  # Endrer fortegnet
+                
+    # Filtrer tidsområdet mellom 5 og 30 sekunder
+    df_disp = df_disp_x[(df_disp_x["Time (s)"] >= 5) & (df_disp_x["Time (s)"] <= 30)].reset_index(drop=True)
+        
+        
+    # Justerer displacement for bakkenivå
+    for col in disp_columns_x:
+        if col.endswith("_X"):  # X-retning
+                df_disp[col] =  df_disp_x[col] - df_disp_x[ground_sensor_x]
+            #elif col.endswith("_Y"):  # Y-retning
+                #df_disp[col] =  df_disp[col] - df_disp[ground_sensor_y]
+       
+                
+    
+        
+    #%% Etter justering for bakkenivå:
+    max_displacements1 = df_disp[disp_columns_x].abs().max().sort_values(ascending=False)
+    
+    plt.figure(figsize=(10, 6))
+    max_displacements1.plot(kind='bar')
+    plt.title(f"{test_number} - Max Absolute Displacement per X-Sensor (Ground Adjusted)")
+    plt.ylabel("Max Displacement (mm)")
+    plt.xticks(rotation=45, ha='right')
+    plt.grid(True)
+    for i, value in enumerate(max_displacements1):
+            plt.text(i, value, f"{value:.1f} mm", ha='center', va='bottom', fontsize=9, fontweight='bold')
+    plt.tight_layout()
+    plot_name = f"{test_number}_MaxDisplacement_X_filtered.png"
+    #plt.savefig(os.path.join(save_folder, plot_name))
+    plt.show()
+    plt.close()
+    #%%
+    first_floor_sensors = [col for col in df_disp.columns if "_1F" in col]
+    second_floor_sensors = [col for col in df_disp.columns if "_2F" in col]
+    drift_vals = []
+
+    for i in range(min(len(first_floor_sensors), len(second_floor_sensors))):
+        drift_0_1 = (df_disp[first_floor_sensors[i]]).abs().max() / H * 100
+        drift_2_1 = (df_disp[second_floor_sensors[i]] - df_disp[first_floor_sensors[i]]).abs().max() / H * 100
+        drift_vals.extend([drift_0_1, drift_2_1])
+
+    drift_data[test_number] = np.sort(drift_vals)
+
+    # Akselerasjon
+    df_acc = df[["Time (s)"] + acc_cols].copy()
+    df_acc = df_acc[(df_acc["Time (s)"] >= 5) & (df_acc["Time (s)"] <= 30)].reset_index(drop=True)
+    acc_vals = []
+
+    for col in acc_cols:
+        if ("1F" in col or "2F" in col):
+            val = df_acc[col].abs().max()
+            if val < 5000:
+                acc_vals.append(val / 981)  # cm/s² -> g
+
+    acc_data[test_number] = np.sort(acc_vals)
+
+# Plotter alle testene i én figur
+fig, axs = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
+
+# --- Drift ---
+for test, values in drift_data.items():
+    if len(values) > 0:
+        cdf = np.arange(1, len(values)+1) / len(values)
+        axs[0].step(values, cdf, where="post", label=test)
+
+for i in range(len(drift_ds_bounds)-1):
+    axs[0].axvspan(drift_ds_bounds[i], drift_ds_bounds[i+1], color=colors[i], alpha=0.2)
+
+axs[0].set_title("Inter-story drift (all tests)")
+axs[0].set_xlabel("Max inter-story drift [%]")
+axs[0].set_ylabel("CDF")
+axs[0].legend()
+axs[0].grid(True)
+axs[0].set_xlim(0, 3)
+axs[0].set_ylim(0, 1.05)
+
+# --- Akselerasjon ---
+for test, values in acc_data.items():
+    if len(values) > 0:
+        cdf = np.arange(1, len(values)+1) / len(values)
+        axs[1].step(values, cdf, where="post", label=test, linestyle='--')
+
+for i in range(len(acc_ds_bounds)-1):
+    axs[1].axvspan(acc_ds_bounds[i], acc_ds_bounds[i+1], color=colors[i], alpha=0.2)
+
+axs[1].set_title("Acceleration (all tests)")
+axs[1].set_xlabel("Max acceleration [g]")
+axs[1].grid(True)
+axs[1].set_xlim(0, 1.2)
+axs[1].set_ylim(0, 1.05)
+
+plt.tight_layout()
+plt.show()
+
+
+
+def plot_lognormal_fragility_curves_combined(values_dict, thresholds, labels, title, xlabel):
+    fig, ax = plt.subplots(figsize=(12, 6))
+    colors = ['green', 'yellow', 'orange', 'red']
+
+    # Fargelag bakgrunn for skadegrenser
+    for i in range(len(thresholds) - 1):
+        ax.axvspan(thresholds[i], thresholds[i + 1], color=colors[i], alpha=0.3, label=labels[i] if i == 0 else None)
+
+    # Plot alle tester
+    for test_name, values in values_dict.items():
+        values = np.array(values)
+        if len(values) < 2 or np.any(values <= 0):
+            continue
+
+        # Empirisk CDF (trapp)
+        sorted_vals = np.sort(values)
+        cdf = np.arange(1, len(sorted_vals) + 1) / len(sorted_vals)
+        ax.step(sorted_vals, cdf, where="post", linestyle='--', linewidth=1.5, label=f"{test_name} – CDF")
+
+        # Lognormal kurve
+        log_vals = np.log(values)
+        mu = np.mean(log_vals)
+        beta = np.std(log_vals)
+
+        x_vals = np.linspace(min(values)*0.8, max(values)*1.5, 300)
+        lognorm_cdf = norm.cdf((np.log(x_vals) - mu) / beta)
+        ax.plot(x_vals, lognorm_cdf, linewidth=2, label=f"{test_name} – Fit")
+
+    ax.set_xlim(0, max(thresholds))
+    ax.set_ylim(0, 1.05)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel("Probability of exceedance")
+    ax.set_title(title)
+    ax.grid(True)
+    ax.legend(loc="lower right", fontsize="small")
+    plt.tight_layout()
+    return fig
+
+# Grenseverdier for drift og akselerasjon
+drift_thresholds = [0, 0.5, 1.0, 2.0, 3.5]
+acc_thresholds = [0, 0.25, 0.5, 1.0, 1.5]
+ds_labels = ['Slight', 'Moderate', 'Extensive', 'Possible Collapse']
+
+plot_lognormal_fragility_curves_combined(
+    drift_data,
+    drift_thresholds,
+    ds_labels,
+    "Lognormal Fragility Curves – Interstory Drift",
+    "Interstory drift [%]"
+)
+
+
+plot_lognormal_fragility_curves_combined(
+    acc_data,
+    acc_thresholds,
+    ds_labels,
+    "Lognormal Fragility Curves – Acceleration",
+    "Acceleration [g]"
+)
 
